@@ -1,20 +1,62 @@
 # 1. Объявляем провайдер, который будет создавать ресурсы
 terraform {
   required_providers {
-    local = {
-      source  = "hashicorp/local"
-      version = "~> 2.0"
+    yandex = {
+      source = "yandex-cloud/yandex"
     }
+  }
+  required_version = ">= 0.13"
+}
+
+provider "yandex" {
+  zone = "ru-central1-a"
+}
+
+resource "yandex_compute_disk" "boot-disk-1" {
+  name     = "boot-disk-1"
+  type     = "network-hdd"
+  zone     = "ru-central1-a"
+  size     = "20"
+  image_id = "fd8429vdm30a3688t25j"
+}
+
+resource "yandex_compute_instance" "vm-1" {
+  name = "terraform1"
+
+  resources {
+    cores  = 2
+    memory = 2
+  }
+
+  boot_disk {
+    disk_id = yandex_compute_disk.boot-disk-1.id
+  }
+
+  network_interface {
+    subnet_id = yandex_vpc_subnet.subnet-1.id
+    nat       = true
+  }
+
+  metadata = {
+    ssh-keys = "ubuntu:${file("~/.ssh/id_ed25519.pub")}"
   }
 }
 
-# 2. Создаем ресурс - текстовый файл
-resource "local_file" "example" {
-  filename = "hello_world.txt"
-  content  = "Привет, это простой пример конфигурации Terraform!"
+resource "yandex_vpc_network" "network-1" {
+  name = "network1"
 }
 
-# 3. Выводим результат (путь к файлу) в консоль после создания
-output "file_path" {
-  value = local_file.example.filename
+resource "yandex_vpc_subnet" "subnet-1" {
+  name           = "subnet1"
+  zone           = "ru-central1-a"
+  network_id     = yandex_vpc_network.network-1.id
+  v4_cidr_blocks = ["192.168.10.0/24"]
+}
+
+output "internal_ip_address_vm_1" {
+  value = yandex_compute_instance.vm-1.network_interface.0.ip_address
+}
+
+output "external_ip_address_vm_1" {
+  value = yandex_compute_instance.vm-1.network_interface.0.nat_ip_address
 }
